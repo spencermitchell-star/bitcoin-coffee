@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bitcoin Coffee — Membership NFT Claim (Solana Devnet)</title>
+<script src="vendor/solana-web3.iife.min.js"></script>
+<style>
+  :root {
+    --cosmic: #E2622C;
+    --cosmic-dark: #b34a1e;
+    --espresso: #1C1512;
+    --porcelain: #F7F4EF;
+    --card: #ffffff;
+    --muted: #8a7f74;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--porcelain); color: var(--espresso);
+  }
+  header {
+    background: var(--espresso); color: var(--porcelain);
+    padding: 28px 20px; text-align: center;
+  }
+  header .brand { display: flex; align-items: center; justify-content: center; gap: 14px; }
+  header h1 { margin: 0; font-size: 28px; letter-spacing: 0.5px; }
+  header h1 .coin { color: var(--cosmic); }
+  header p.tagline { margin: 8px 0 0; color: var(--cosmic); font-style: italic; font-size: 15px; }
+  header p.sub { margin: 6px 0 0; font-size: 12px; color: #b7a99a; }
+  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 60px; }
+  .step {
+    background: var(--card); border-radius: 14px; padding: 20px;
+    margin-bottom: 18px; box-shadow: 0 2px 10px rgba(28,21,18,0.06);
+    border: 1px solid #eee3d6;
+  }
+  .step h2 { margin: 0 0 6px; font-size: 18px; }
+  .step h2 .n {
+    display: inline-block; width: 26px; height: 26px; line-height: 26px; text-align: center;
+    background: var(--cosmic); color: #fff; border-radius: 50%; font-size: 14px; margin-right: 8px;
+  }
+  .step p.desc { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+  button {
+    background: var(--cosmic); color: #fff; border: none; border-radius: 10px;
+    padding: 12px 20px; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: var(--cosmic-dark); }
+  button:disabled { background: #d8c9b8; cursor: not-allowed; }
+  button.secondary { background: var(--espresso); }
+  button.secondary:hover:not(:disabled) { background: #3a2f28; }
+  .addr { font-family: ui-monospace, Menlo, monospace; font-size: 12px; word-break: break-all; color: var(--muted); }
+  .addr a { color: var(--cosmic); }
+  .tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+  .tier {
+    background: var(--porcelain); border: 2px solid #eee3d6; border-radius: 12px;
+    padding: 16px; text-align: center; cursor: pointer; transition: border-color .15s;
+  }
+  .tier:hover { border-color: var(--cosmic); }
+  .tier.selected { border-color: var(--cosmic); box-shadow: 0 0 0 2px rgba(226,98,44,.25); }
+  .tier .medal { font-size: 30px; }
+  .tier h3 { margin: 8px 0 2px; font-size: 16px; }
+  .tier .price { color: var(--cosmic); font-weight: 700; font-size: 15px; }
+  .tier .perk { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .nft-card {
+    display: none; background: var(--espresso); color: var(--porcelain);
+    border-radius: 12px; padding: 18px; margin-top: 14px;
+  }
+  .nft-card.show { display: block; }
+  .nft-card h3 { margin: 0 0 4px; color: var(--cosmic); font-size: 18px; }
+  .nft-card p { margin: 4px 0; font-size: 13px; color: #d8cbbd; }
+  .nft-card a { color: var(--cosmic); word-break: break-all; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  #log {
+    background: var(--espresso); color: #e8ded2; border-radius: 12px; padding: 16px;
+    font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; line-height: 1.7;
+    max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+  }
+  #log a { color: var(--cosmic); }
+  #log .ok { color: #7fd08a; }
+  #log .err { color: #ff8a8a; }
+  #log .warn { color: #f0c46c; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  input[type=text], input[type=number] {
+    padding: 10px 12px; border-radius: 8px;
+    border: 1px solid #ddd0bd; font-size: 14px;
+  }
+  input[type=number] { width: 120px; }
+  label.lbl { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
+  .note { font-size: 13px; color: var(--muted); margin-top: 10px; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <!-- Sato: Bitcoin Coffee mascot, simple SVG cup -->
+    <svg width="52" height="52" viewBox="0 0 64 64" aria-label="Sato">
+      <rect x="14" y="18" width="30" height="34" rx="6" fill="#E2622C"/>
+      <path d="M44 24 h6 a8 8 0 0 1 0 16 h-6" fill="none" stroke="#E2622C" stroke-width="6"/>
+      <rect x="14" y="10" width="30" height="8" rx="4" fill="#F7F4EF"/>
+      <circle cx="24" cy="34" r="3" fill="#1C1512"/>
+      <circle cx="34" cy="34" r="3" fill="#1C1512"/>
+      <path d="M24 42 q5 5 10 0" stroke="#1C1512" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+    </svg>
+    <div style="text-align:left">
+      <h1>Bitcoin <span class="coin">Coffee</span></h1>
+      <p class="tagline">Proof of roast.</p>
+    </div>
+  </div>
+  <p class="sub">Membership NFT claim &middot; Solana devnet &middot; every club card comes with a numbered on-chain membership</p>
+</header>
+
+<main>
+  <div class="step">
+    <h2><span class="n">1</span>Choose your tier</h2>
+    <p class="desc">Three numbered club cards. Each one claims a matching membership NFT on Solana.</p>
+    <div class="tiers" id="tiers"></div>
+  </div>
+
+  <div class="step">
+    <h2><span class="n">2</span>Your card number</h2>
+    <p class="desc">Enter the number printed on your physical club card. Your NFT is minted as that member number.</p>
+    <div class="row">
+      <div>
+        <label class="lbl" for="cardNo">Card number</label>
+        <input type="number" id="cardNo" value="1" min="1" max="9999">
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <h2><span class="n">3</span>Demo wallet</h2>
+    <p class="desc">Generates a fresh in-browser keypair and funds it with devnet SOL. No wallet extension needed.</p>
+    <div class="row">
+      <button id="btnWallet" onclick="createWallet()">Create demo wallet</button>
+    </div>
+    <p class="addr" id="walletAddr"></p>
+    <p class="addr" id="collectionInfo"></p>
+  </div>
+
+  <div class="step">
+    <h2><span class="n">4</span>Claim your membership NFT</h2>
+    <p class="desc">One tap, one atomic devnet transaction: creates your NFT mint, attaches Metaplex metadata
+      (name, tier attributes, collection pointer), and mints the 1/1 to your wallet.</p>
+    <div class="row">
+      <button id="btnClaim" onclick="claim()" disabled>Claim membership NFT</button>
+    </div>
+    <div class="nft-card" id="nftCard">
+      <h3 id="nftName"></h3>
+      <p id="nftTier"></p>
+      <p>Mint: <a id="nftMint" href="#" target="_blank" rel="noopener"></a></p>
+      <p>Claim tx: <a id="nftTx" href="#" target="_blank" rel="noopener"></a></p>
+      <p id="nftNote"></p>
+    </div>
+  </div>
+
+  <div class="step">
+    <h2><span class="n">5</span>Transaction log</h2>
+    <p class="desc">Every action below is a confirmed Solana devnet transaction. Click a signature to view it on Solana Explorer.</p>
+    <div class="row" style="margin-bottom:10px">
+      <div style="flex:1; min-width:220px">
+        <label class="lbl" for="rpcUrl">Devnet RPC endpoint</label>
+        <input type="text" id="rpcUrl" value="https://api.devnet.solana.com" style="width:100%">
+      </div>
+    </div>
+    <div id="log">Waiting to begin…</div>
+    <p class="note">Demo keys live only in this browser tab and hold valueless devnet SOL. Nothing here touches mainnet.
+      The collection update authority verifies each claim on-chain afterwards (one VerifyCollection call per NFT).</p>
+  </div>
+</main>
+
+<footer>Bitcoin Coffee &middot; Proof of roast. &middot; Membership NFT demo on Solana devnet</footer>
+
+<script>
+/* ============ constants (tier names/prices are placeholders — edit freely) ============ */
+const { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, TransactionInstruction, SYSVAR_RENT_PUBKEY } = solanaWeb3;
+const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+const ATOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
+const TMETA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
+const TIERS = [
+  { name: 'Bean',    medal: '🫘', price: 56,  perk: 'The everyday member card' },
+  { name: 'Roaster', medal: '☕', price: 132, perk: 'For the devoted regular' },
+  { name: 'Founder', medal: '👑', price: 325, perk: 'The inner circle' },
+];
+
+/* ============ state ============ */
+let connection, memberKp, collectionMint = null, selectedTier = 0, busy = false;
+
+/* ============ encoders (mirrors nft-demo/metadata-helpers.mjs + token-helpers.mjs) ============ */
+const u8 = n => { const b = Buffer.alloc(1); b.writeUInt8(n); return b; };
+const u16 = n => { const b = Buffer.alloc(2); b.writeUInt16LE(n); return b; };
+const u64 = n => { const b = Buffer.alloc(8); b.writeBigUInt64LE(BigInt(n)); return b; };
+function borshStr(s, maxLen, field) {
+  const bytes = Buffer.from(s, 'utf8');
+  if (bytes.length > maxLen) throw new Error(field + ' too long');
+  const len = Buffer.alloc(4); len.writeUInt32LE(bytes.length);
+  return Buffer.concat([len, bytes]);
+}
+function findATA(owner, mintAddr) {
+  return PublicKey.findProgramAddressSync(
+    [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mintAddr.toBuffer()], ATOKEN_PROGRAM_ID)[0];
+}
+function findMetadataPda(mint) {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from('metadata'), TMETA_PROGRAM_ID.toBuffer(), mint.toBuffer()], TMETA_PROGRAM_ID)[0];
+}
+function encodeDataV2(o) {
+  const parts = [borshStr(o.name, 32, 'name'), borshStr(o.symbol, 10, 'symbol'),
+                 borshStr(o.uri, 200, 'uri'), u16(o.sellerFeeBps || 0)];
+  if (!o.creators || o.creators.length === 0) { parts.push(Buffer.from([0])); }
+  else {
+    parts.push(Buffer.from([1]));
+    const n = Buffer.alloc(4); n.writeUInt32LE(o.creators.length); parts.push(n);
+    for (const c of o.creators)
+      parts.push(Buffer.concat([c.address.toBuffer(), Buffer.from([c.verified ? 1 : 0, c.share])]));
+  }
+  if (!o.collection) parts.push(Buffer.from([0]));
+  else parts.push(Buffer.concat([Buffer.from([1, o.collection.verified ? 1 : 0]), o.collection.key.toBuffer()]));
+  parts.push(Buffer.from([0])); // uses: none
+  return Buffer.concat(parts);
+}
+const initializeMintIx = (mintAddr, authority) => new TransactionInstruction({
+  programId: TOKEN_PROGRAM_ID,
+  keys: [{ pubkey: mintAddr, isSigner: false, isWritable: true }],
+  data: Buffer.concat([u8(0), u8(0), authority.toBuffer(), u8(0)]), // decimals 0, no freeze authority
+});
+const mintToIx = (mintAddr, dest, authority, amount) => new TransactionInstruction({
+  programId: TOKEN_PROGRAM_ID,
+  keys: [
+    { pubkey: mintAddr, isSigner: false, isWritable: true },
+    { pubkey: dest, isSigner: false, isWritable: true },
+    { pubkey: authority, isSigner: true, isWritable: false },
+  ],
+  data: Buffer.concat([u8(7), u64(amount)]),
+});
+const createATAIx = (payer, ata, owner, mintAddr) => new TransactionInstruction({
+  programId: ATOKEN_PROGRAM_ID,
+  keys: [
+    { pubkey: payer, isSigner: true, isWritable: true },
+    { pubkey: ata, isSigner: false, isWritable: true },
+    { pubkey: owner, isSigner: false, isWritable: false },
+    { pubkey: mintAddr, isSigner: false, isWritable: false },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
+  ],
+  data: Buffer.alloc(0),
+});
+function createMetadataV3Ix(o) {
+  const args = Buffer.concat([
+    encodeDataV2({ name: o.name, symbol: o.symbol, uri: o.uri, sellerFeeBps: 0,
+                   creators: o.creators, collection: o.collection }),
+    Buffer.from([1]), // is_mutable
+    Buffer.from([0]), // collection_details: none (unsized)
+  ]);
+  return new TransactionInstruction({
+    programId: TMETA_PROGRAM_ID,
+    keys: [
+      { pubkey: o.metadataPda, isSigner: false, isWritable: true },
+      { pubkey: o.mint, isSigner: false, isWritable: false },
+      { pubkey: o.mintAuthority, isSigner: true, isWritable: false },
+      { pubkey: o.payer, isSigner: true, isWritable: true },
+      { pubkey: o.updateAuthority, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
+    ],
+    data: Buffer.concat([u8(33), args]),
+  });
+}
+function memberUri(tier, cardNo) {
+  const json = JSON.stringify({ attributes: [
+    { trait_type: 'Tier', value: tier },
+    { trait_type: 'Card Number', value: String(cardNo) },
+  ]});
+  const uri = 'data:application/json;base64,' + Buffer.from(json, 'utf8').toString('base64');
+  if (uri.length > 200) throw new Error('member URI exceeds 200 bytes');
+  return uri;
+}
+function memberName(cardNo) {
+  return 'Bitcoin Coffee — Member #' + String(cardNo).padStart(3, '0');
+}
+
+/* ============ ui helpers ============ */
+const $ = id => document.getElementById(id);
+const exTx = sig => `https://explorer.solana.com/tx/${sig}?cluster=devnet`;
+const exAddr = a => `https://explorer.solana.com/address/${a}?cluster=devnet`;
+function log(html, cls) {
+  const el = $('log');
+  if (el.textContent === 'Waiting to begin…') el.textContent = '';
+  const div = document.createElement('div');
+  if (cls) div.className = cls;
+  div.innerHTML = html;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+function setBusy(b) { busy = b; refreshLocks(); }
+function refreshLocks() {
+  $('btnWallet').disabled = busy;
+  $('btnClaim').disabled = busy || !memberKp || !collectionMint;
+}
+function conn() {
+  const url = $('rpcUrl').value.trim();
+  if (!connection || connection.rpcEndpoint !== url) connection = new Connection(url, 'confirmed');
+  return connection;
+}
+async function sendTx(tx, signers, label) {
+  const sig = await conn().sendTransaction(tx, signers);
+  await conn().confirmTransaction(sig, 'confirmed');
+  log(`<span class="ok">✓</span> ${label}<br>&nbsp;&nbsp;<a href="${exTx(sig)}" target="_blank" rel="noopener">${sig}</a>`, 'ok');
+  return sig;
+}
+
+/* ============ flows ============ */
+async function loadCollection() {
+  try {
+    const res = await fetch('collection-config.json');
+    if (!res.ok) throw new Error('not found');
+    const cfg = await res.json();
+    collectionMint = new PublicKey(cfg.collection_mint);
+    $('collectionInfo').innerHTML =
+      'collection: <a href="' + exAddr(collectionMint) + '" target="_blank" rel="noopener">' +
+      collectionMint.toBase58() + '</a>';
+    log('<span class="ok">✓</span> Collection loaded: ' + collectionMint.toBase58(), 'ok');
+  } catch (e) {
+    log('<span class="warn">⚠</span> collection-config.json not found — run ' +
+        '<b>node setup-collection.mjs</b> from a devnet-reachable network first.', 'warn');
+  }
+  refreshLocks();
+}
+
+async function createWallet() {
+  setBusy(true);
+  try {
+    memberKp = Keypair.generate();
+    log(`Generated demo wallet: <a href="${exAddr(memberKp.publicKey)}" target="_blank" rel="noopener">${memberKp.publicKey.toBase58()}</a>`);
+    log('Requesting devnet airdrop (1 SOL)…');
+    const sig = await conn().requestAirdrop(memberKp.publicKey, 1 * LAMPORTS_PER_SOL);
+    await conn().confirmTransaction(sig, 'confirmed');
+    log('<span class="ok">✓</span> Airdrop confirmed.', 'ok');
+    $('walletAddr').innerHTML = 'wallet: <a href="' + exAddr(memberKp.publicKey) +
+      '" target="_blank" rel="noopener">' + memberKp.publicKey.toBase58() + '</a>';
+  } catch (e) { log('Wallet creation failed: ' + e.message, 'err'); }
+  setBusy(false);
+}
+
+async function claim() {
+  const tier = TIERS[selectedTier];
+  const cardNo = Math.max(1, Math.min(9999, parseInt($('cardNo').value, 10) || 1));
+  const name = memberName(cardNo);
+  setBusy(true);
+  try {
+    const uri = memberUri(tier.name, cardNo);
+    const mintKp = Keypair.generate();
+    const metadataPda = findMetadataPda(mintKp.publicKey);
+    const rent = await conn().getMinimumBalanceForRentExemption(82);
+    const memberATA = findATA(memberKp.publicKey, mintKp.publicKey);
+
+    // One atomic transaction: create mint + metadata + token account + mint the 1/1.
+    const tx = new Transaction().add(
+      SystemProgram.createAccount({
+        fromPubkey: memberKp.publicKey, newAccountPubkey: mintKp.publicKey,
+        lamports: rent, space: 82, programId: TOKEN_PROGRAM_ID,
+      }),
+      initializeMintIx(mintKp.publicKey, memberKp.publicKey),
+      createMetadataV3Ix({
+        metadataPda, mint: mintKp.publicKey,
+        mintAuthority: memberKp.publicKey, payer: memberKp.publicKey,
+        updateAuthority: memberKp.publicKey,
+        name, symbol: 'BCOF', uri,
+        creators: [{ address: memberKp.publicKey, verified: true, share: 100 }],
+        collection: { verified: false, key: collectionMint },
+      }),
+      createATAIx(memberKp.publicKey, memberATA, memberKp.publicKey, mintKp.publicKey),
+      mintToIx(mintKp.publicKey, memberATA, memberKp.publicKey, 1)
+    );
+    const sig = await sendTx(tx, [memberKp, mintKp],
+      `claim — "${name}" (${tier.name} tier) minted to your wallet`);
+
+    $('nftName').textContent = '🎟 ' + name;
+    $('nftTier').textContent = tier.name + ' tier · card #' + cardNo + ' · 1/1';
+    $('nftMint').textContent = mintKp.publicKey.toBase58();
+    $('nftMint').href = exAddr(mintKp.publicKey);
+    $('nftTx').textContent = sig;
+    $('nftTx').href = exTx(sig);
+    $('nftNote').textContent =
+      'Collection pointer: unverified (the collection authority verifies each claim on-chain afterwards).';
+    $('nftCard').classList.add('show');
+    log('<span class="ok">✓</span> Membership claimed. Proof of roast.', 'ok');
+  } catch (e) { log('Claim failed: ' + e.message, 'err'); }
+  setBusy(false);
+}
+
+/* ============ render tiers ============ */
+function renderTiers() {
+  $('tiers').innerHTML = TIERS.map((t, i) => `
+    <div class="tier${i === selectedTier ? ' selected' : ''}" onclick="selectTier(${i})">
+      <div class="medal">${t.medal}</div>
+      <h3>${t.name}</h3>
+      <div class="price">$${t.price}</div>
+      <div class="perk">${t.perk}</div>
+    </div>`).join('');
+}
+function selectTier(i) { selectedTier = i; renderTiers(); }
+
+renderTiers();
+loadCollection();
+refreshLocks();
+</script>
+</body>
+</html>
